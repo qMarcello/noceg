@@ -46,8 +46,6 @@ noceg_signatures.exe "Path\To\GameExecutable.exe"
 
 Or simply **drag and drop** the executable onto `noceg_signatures.exe`.
 
-> 🔔 **Note**: If the target executable has **ASLR** enabled, the tool will create a new binary named `<original>_noaslr.exe`. Use this in the next steps.
-
 ---
 
 ### **3. Inject the runtime library**
@@ -59,9 +57,10 @@ Or simply **drag and drop** the executable onto `noceg_signatures.exe`.
 Now, launch the game. A confirmation window should appear:
 > ✅ **"Successfully finished the task!"**
 
-### ⚠️ Special case for select games: `ShouldRestart` option
+### ⚠️ Special cases for certain games
 
-The following games require `ShouldRestart` to be set to `true` in `noceg.json`:
+#### `ShouldRestart` option  
+The following titles require `"ShouldRestart": true` in `noceg.json`:
 
 - Homefront  
 - The Darkness II  
@@ -69,14 +68,26 @@ The following games require `ShouldRestart` to be set to `true` in `noceg.json`:
 - F.E.A.R. 3  
 - Risen 2
 
-To enable this option, replace this:
+To enable this option, update your configuration from:
 
 ```json
 "ShouldRestart": false
 ```
-with
+to
 ```json
 "ShouldRestart": true
+```
+
+#### `BreakpointType` option  
+Some games (e.g. `Duke Nukem: Forever`) use integrity checks that can detect software breakpoints, which may lead to incorrect values.
+If this occurs, switch to hardware breakpoints by updating:
+
+```json
+ "BreakpointType": 1
+```
+to
+```json
+ "BreakpointType": 2
 ```
 
 ---
@@ -108,6 +119,7 @@ A modified version will be generated with a suffix like `_noceg.exe` or `_noceg.
 ✔ Deadpool
 ✔ DeathSpank
 ✔ DeathSpank: Thongs Of Virtue
+✔ Duke Nukem: Forever
 ✔ DiRT Showdown
 ✔ DiRT Showdown Demo
 ✔ F1 2012™

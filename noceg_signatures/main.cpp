@@ -9,7 +9,7 @@
  *
  * This software is provided "as is", without warranty of any kind.
  *
- * Full license text available in LICENSE.md
+ * Full license text available in LICENSE
  */
 
 #include <iostream>
@@ -49,7 +49,7 @@ int main(
     char * argv[] 
 )
 {
-    std::cout << "CEG signatures finder by iArtorias (https://github.com/iArtorias)" << std::endl << std::endl;
+    std::cout << "CEG signatures finder by iArtorias (https://github.com/iArtorias)." << std::endl << std::endl;
 
     try
     {
@@ -87,6 +87,9 @@ int main(
             std::cin.get();
             return 1;
         }
+
+        // Assign the module name.
+        Data::CEG_MODULENAME = fs::path( argv[1] ).filename().string();
 
         // Find out if this is an odler CEG.
         FindFunction( "51 B8 ?? ?? ?? ?? FF D0 59 FF E0", address, 0x20, Data::CEG_OLD_VERSION );
@@ -183,11 +186,13 @@ int main(
                 print_protected_funcs( Data::CEG_PROTECTED_STOLEN_FUNCS_v3, "(stolen) (v3)" );
                 print_protected_funcs( Data::CEG_PROTECTED_CONSTANT_FUNCS, "(constant)" );
 
-                if (Data::CEG_REGISTER_THREAD_FUNC)
+                if (!Data::CEG_REGISTER_THREAD_FUNC_FUNCS.empty() && Data::CEG_REGISTER_THREAD_FUNC)
                 {
                     Data::CEG_REGISTER_THREAD_FUNC = TransformToRealAddress( address, Data::CEG_REGISTER_THREAD_FUNC );
                     std::cout << std::format( "[SUCCESS] Found CEG register thread function: '0x{:08x}'.",
                         Data::CEG_REGISTER_THREAD_FUNC.as<std::uint32_t>() ) << std::endl;
+
+                    TransformToRealAddress( address, Data::CEG_REGISTER_THREAD_FUNC_FUNCS );
                 }
             }
         }
@@ -214,20 +219,6 @@ int main(
 
         auto writer = std::make_unique<JsonWriter>( fs::path( argv[0] ).parent_path() / "noceg.json" );
         writer->WriteJSON();
-
-        if (Data::CEG_ASLR_ENABLED)
-        {
-            auto save_res = SaveBinaryNoASLR( content, argv[1] );
-
-            if (!save_res)
-            {
-                std::cerr << std::format( "[ERROR] '{}'.", ErrorToString( save_res.error() ) ) << std::endl;
-                std::cin.get();
-                return 1;
-            }
-
-            std::cout << "[SUCCESS] Successfully saved the binary with disabled ASLR." << std::endl;
-        }
 
         std::cout << std::endl << "Press 'ENTER' key to exit application." << std::endl;
         std::cin.get();

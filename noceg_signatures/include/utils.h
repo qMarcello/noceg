@@ -131,6 +131,9 @@ namespace CEG
         // File offset to the raw data of the first section.
         inline std::uint32_t CEG_RAW_DATA_POINTER = 0;
 
+        // Name of the CEG module.
+        inline std::string CEG_MODULENAME {};
+
         // A map of CEG protected stolen/masked functions.
         inline std::multimap<mem::pointer, std::tuple<mem::pointer, mem::pointer, mem::pointer>> CEG_PROTECTED_STOLEN_FUNCS_v1 {}; // v1
         inline std::multimap<mem::pointer, std::tuple<mem::pointer, mem::pointer, mem::pointer>> CEG_PROTECTED_STOLEN_FUNCS_v2 {}; // v2
@@ -159,9 +162,6 @@ namespace CEG
 
         // Pointer indicating if this is an older version of CEG.
         inline mem::pointer CEG_OLD_VERSION = nullptr;
-
-        // Flag indicating whether ASLR is enabled.
-        inline std::atomic_bool CEG_ASLR_ENABLED = false;
     }
     
     template<typename T>
@@ -193,48 +193,6 @@ namespace CEG
             return std::unexpected( Error::FileReadError );
 
         return data;
-    }
-
-
-    /**
-    * @brief Checks if ASLR is enabled in the PE header and updates global state.
-    *
-    * @param nt_headers Pointer to the NT headers structure.
-    * @return true if ASLR is enabled, false otherwise.
-    */
-    [[nodiscard]] bool IsASLREnabled(
-        const IMAGE_NT_HEADERS * nt_headers
-    ) noexcept
-    {
-        if (!nt_headers)
-            return false;
-
-        Data::CEG_ASLR_ENABLED = (nt_headers->OptionalHeader.DllCharacteristics &
-            IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) != 0;
-
-        return Data::CEG_ASLR_ENABLED.load();
-    }
-
-
-    /**
-    * @brief Disables ASLR by modifying the PE header's 'DllCharacteristics' field.
-    *
-    * @param nt_headers Pointer to the NT headers structure to modify.
-    * @return 'std::expected<void, Error>' Either success or failure.
-    * @retval 'InvalidPEHeader' if nt_headers is null.
-    */
-    [[nodiscard]] std::expected<void, Error> DisableASLR(
-        IMAGE_NT_HEADERS * nt_headers
-    ) noexcept
-    {
-        if (!nt_headers)
-            return std::unexpected( Error::InvalidPEHeader );
-
-        // Disable ASLR by clearing the dynamic base flag.
-        if (Data::CEG_ASLR_ENABLED.load())
-            nt_headers->OptionalHeader.DllCharacteristics &= ~IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE;
-
-        return {};
     }
 
 
@@ -292,68 +250,7 @@ namespace CEG
         Data::CEG_VIRTUAL_ADDRESS = section_header->VirtualAddress;
         Data::CEG_CODE_BASE = Data::CEG_IMAGEBASE_RAW + Data::CEG_VIRTUAL_ADDRESS;
 
-        if (IsASLREnabled( nt_headers ))
-        {
-            auto res = DisableASLR( nt_headers );
-
-            if (res)
-                std::cout << "[SUCCESS] Successfully disabled ASLR." << std::endl;
-            else
-            {
-                Error error = res.error();
-                std::cerr << std::format( "[ERROR] '{}'.", ErrorToString( error ) ) << std::endl;
-            }
-        }
-
         return {};
-    }
-
-
-    /**
-    * @brief Saves a modified binary with ASLR disabled to a new file.
-    *
-    * @param content The modified binary content to save.
-    * @param filename Original filename path.
-    * @return 'std::expected<void, Error>' Either success or specific error.
-    * @retval 'EmptyContent' if content is empty.
-    * @retval 'FileNotFound' if filename is empty.
-    * @retval 'OutputFileCreateError' if file cannot be created.
-    * @retval 'FileWriteError' if writing fails.
-    */
-    [[nodiscard]] std::expected<void, Error> SaveBinaryNoASLR(
-        std::string_view content,
-        fs::path filename
-    ) noexcept try
-    {
-        if (content.empty())
-            return std::unexpected( Error::EmptyContent );
-
-        if (filename.empty())
-            return std::unexpected( Error::FileNotFound );
-
-        // Full path to the output binary file with no ASLR.
-        const fs::path path = filename.parent_path() /
-            (filename.stem() += "_noaslr" + filename.extension().string());
-
-        std::ofstream out( path, std::ios::binary | std::ios::trunc );
-        if (!out.is_open())
-            return std::unexpected( Error::OutputFileCreateError );
-
-        out.write( reinterpret_cast<const char *>(content.data()), content.size() );
-
-        if (out.fail())
-            return std::unexpected( Error::FileWriteError );
-
-        out.close();
-        return {};
-    }
-    catch (const fs::filesystem_error &)
-    {
-        return std::unexpected( Error::OutputFileCreateError );
-    }
-    catch (...)
-    {
-        return std::unexpected( Error::FileWriteError );
     }
 
 
@@ -545,6 +442,30 @@ namespace CEG
         {
             return CalculateRealAddress( start, addr.as<std::uint32_t>() );
         } );
+    }
+
+
+    /**
+    * @brief Transforms a set of memory addresses to their corresponding real addresses.
+    *
+    * @param start Pointer to the beginning of the original memory region.
+    * @param addresses A set of addresses to transform.
+    */
+    void TransformToRealAddress(
+        const void * start,
+        std::unordered_set<mem::pointer> & addresses
+    ) noexcept
+    {
+        std::unordered_set<mem::pointer> transformed;
+
+        std::transform( addresses.begin(), addresses.end(),
+            std::inserter( transformed, transformed.begin() ),
+            [start]( mem::pointer addr )
+        {
+            return CalculateRealAddress( start, addr.as<std::uint32_t>() );
+        } );
+
+        addresses = std::move( transformed );
     }
     
     

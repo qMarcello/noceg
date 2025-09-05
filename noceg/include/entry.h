@@ -9,7 +9,7 @@
  *
  * This software is provided "as is", without warranty of any kind.
  *
- * Full license text available in LICENSE.md
+ * Full license text available in LICENSE
  */
 
 #pragma once
@@ -50,6 +50,14 @@ public:
         {
             LOG_WARNING( "'ConstantOrStolen' key missing or not an array." );
             return;
+        }
+
+        auto & bp = m_AppManager->GetBreakpointManager();
+
+        if (json.contains( "BreakpointType" ) && json["BreakpointType"].is_number())
+        {
+            if (json["BreakpointType"].get<std::int32_t>() == 2) // '2' is 'Hardware'.
+                bp.SetBreakpointType( 2 );
         }
 
         const auto & constant_or_stolen_funcs = json["ConstantOrStolen"];
@@ -116,9 +124,9 @@ public:
                     }
 
                     // Extract the required addresses from the JSON fields.
-                    const auto func_addr = std::stoull( func_key, nullptr, 16 );
-                    const auto bp_addr = std::stoull( data["BP"].get<std::string>(), nullptr, 16 );
-                    const auto eip_addr = std::stoull( data["EIP"].get<std::string>(), nullptr, 16 );
+                    const auto func_addr = static_cast<std::uintptr_t>(std::stoull( func_key, nullptr, 16 ));
+                    const auto bp_addr = static_cast<std::uintptr_t>(std::stoull( data["BP"].get<std::string>(), nullptr, 16 ));
+                    const auto eip_addr = static_cast<std::uintptr_t>(std::stoull( data["EIP"].get<std::string>(), nullptr, 16 ));
 
                     // Validate addresses are not zero.
                     if (func_addr == 0 || bp_addr == 0 || eip_addr == 0)
@@ -127,10 +135,10 @@ public:
                         continue;
                     }
 
-                    m_AppManager->SetTargetAddress( static_cast<std::uintptr_t>(func_addr) );
-                    m_AppManager->SetEipAddress( static_cast<std::uintptr_t>(eip_addr) );
+                    m_AppManager->SetTargetAddress( m_AppManager->CalculateRealAddress( func_addr ) );
+                    m_AppManager->SetEipAddress( m_AppManager->CalculateRealAddress( eip_addr ) );
 
-                    m_AppManager->GetBreakpointManager().SetBreakpoint( static_cast<std::uintptr_t>(bp_addr) );
+                    bp.SetBreakpoint( m_AppManager->CalculateRealAddress( bp_addr ) );
 
                     const auto type = data["Type"].get<int>();
 
@@ -215,13 +223,24 @@ public:
 
         const auto & json = config.ReadData();
 
+        std::string module_name {};
+
+        // Safe check for 'ModuleName' field.
+        if (json.contains( "ModuleName" ) && json["ModuleName"].is_string())
+            module_name = json["ModuleName"].get<std::string>();
+
+        if (module_name.ends_with( ".dll" ))
+            m_AppManager->SetDefaultImageBase( 0x10000000 );
+
+        m_AppManager->SetTargetImageBase( module_name );
+
         // Safe check for 'Init' field.
         if (!json.contains( "Init" ) || !json["Init"].is_string())
         {
             return std::unexpected { Error::CEGInitFunctionNotFound };
         }
 
-        const auto ceg_init_addr = std::stoull( json["Init"].get<std::string>(), nullptr, 16 );
+        const auto ceg_init_addr = static_cast<std::uintptr_t>(std::stoull( json["Init"].get<std::string>(), nullptr, 16 ));
 
         // Safe check for 'RegisterThread' field.
         if (!json.contains( "RegisterThread" ) || !json["RegisterThread"].is_string())
@@ -229,13 +248,13 @@ public:
             return std::unexpected { Error::CEGRegisterThreadFunctionNotFound };
         }
 
-        const auto ceg_registerthread_addr = std::stoull( json["RegisterThread"].get<std::string>(), nullptr, 16 );
+        const auto ceg_registerthread_addr = static_cast<std::uintptr_t>(std::stoull( json["RegisterThread"].get<std::string>(), nullptr, 16 ));
 
-        m_AppManager->SetRegisterThreadAddress( static_cast<std::uintptr_t>(ceg_registerthread_addr) );
+        m_AppManager->SetRegisterThreadAddress( m_AppManager->CalculateRealAddress( ceg_registerthread_addr ) );
         m_AppManager->SetExceptionHandler( CEGExceptionHandler );
 
         using CEG_Init_t = bool(*)();
-        const auto ceg_init = reinterpret_cast<CEG_Init_t>(ceg_init_addr);
+        const auto ceg_init = reinterpret_cast<CEG_Init_t>(m_AppManager->CalculateRealAddress( ceg_init_addr ));
 
         // If the CEG init function is valid and returns true, begin processing.
         if (ceg_init && ceg_init())

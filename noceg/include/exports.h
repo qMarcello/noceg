@@ -9,7 +9,7 @@
  *
  * This software is provided "as is", without warranty of any kind.
  *
- * Full license text available in LICENSE.md
+ * Full license text available in LICENSE
  */
 
 #pragma once

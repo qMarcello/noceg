@@ -9,10 +9,30 @@
  *
  * This software is provided "as is", without warranty of any kind.
  *
- * Full license text available in LICENSE.md
+ * Full license text available in LICENSE
  */
 
 #pragma once
+
+enum class BreakpointType : std::uint8_t
+{
+    Software = 1,
+    Hardware = 2
+};
+
+enum class HardwareBreakCondition : DWORD
+{
+    Execute = 0, // Break on instruction execution.
+    Write = 1, // Break on data write.
+    Access = 3  // Break on read/write access.
+};
+
+enum class HardwareBreakSize : DWORD
+{
+    One = 0, // 1 byte.
+    Two = 1, // 2 bytes.
+    Four = 3 // 4 bytes.
+};
 
 // Memory protection manager.
 class MemoryManager
@@ -83,6 +103,16 @@ private:
     // Flag indicating if a breakpoint is currently active.
     bool m_IsSet { false };
 
+    // Which debug register slot is used (0–3).
+    int m_Slot { -1 };
+
+    // The thread handle where the breakpoint is applied.
+    HANDLE m_Thread { nullptr };
+    
+    // Breakpoint type to be used.
+    // 'Software' is default.
+    BreakpointType m_BreakpointType { BreakpointType::Software };
+
 public:
 
 
@@ -91,7 +121,7 @@ public:
      *
      * @param address The memory address where to place the breakpoint.
      */
-    [[nodiscard]] void SetBreakpoint(
+    [[nodiscard]] void SetSoftwareBreakpoint(
         std::uintptr_t address
     ) noexcept
     {
@@ -112,8 +142,98 @@ public:
     }
 
 
+    /**
+     * @brief Sets a hardware breakpoint on the current thread.
+     *
+     * @param address Address to monitor.
+     * @param slot Debug register slot (0–3).
+     * @param type Break condition (execute, write, access).
+     * @param size Size of watched memory (1, 2, 4 bytes).
+     */
+    [[nodiscard]] void SetHardwareBreakpoint(
+        std::uintptr_t address,
+        std::int32_t slot = 0,
+        HardwareBreakCondition type = HardwareBreakCondition::Execute,
+        HardwareBreakSize size = HardwareBreakSize::One
+    ) noexcept
+    {
+        if (m_IsSet || slot < 0 || slot > 3)
+            return;
+
+        CONTEXT ctx {};
+        ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+
+        m_Thread = GetCurrentThread();
+        if (!GetThreadContext( m_Thread, &ctx ))
+            return;
+
+        // Assign address to DRx register
+        switch (slot)
+        {
+            case 0: 
+                ctx.Dr0 = address;
+                break;
+
+            case 1:
+                ctx.Dr1 = address; 
+                break;
+
+            case 2: 
+                ctx.Dr2 = address; 
+                break;
+
+            case 3:
+                ctx.Dr3 = address;
+                break;
+        }
+
+        // Clear bits for this slot
+        ctx.Dr7 &= ~(0xF << (slot * 4));
+
+        // Local enable for this slot
+        ctx.Dr7 |= (1 << (slot * 2));
+
+        // Set type & size in DR7
+        ctx.Dr7 |= ((static_cast<DWORD>(type) & 0x3) << (16 + slot * 4));
+        ctx.Dr7 |= ((static_cast<DWORD>(size) & 0x3) << (18 + slot * 4));
+
+        if (!SetThreadContext( m_Thread, &ctx ))
+            return;
+
+        m_Address = address;
+        m_Slot = slot;
+        m_IsSet = true;
+    }
+    
+    
+    /**
+    * @brief Sets either software or hardware breakpoint at the specified memory address.
+    *
+    * @param address The memory address where to place the breakpoint.
+    */
+    [[nodiscard]] void SetBreakpoint( 
+        std::uintptr_t address
+    ) noexcept
+    {
+        switch (m_BreakpointType)
+        {
+            case BreakpointType::Software:
+            {
+                SetSoftwareBreakpoint( address );
+                break;
+            }
+
+            case BreakpointType::Hardware:
+            {
+                SetHardwareBreakpoint( address );
+                break;
+            }
+        }
+    }
+
+
     // Removes the currently set breakpoint and restores original code.
-    [[nodiscard]] void RemoveBreakpoint() noexcept
+    [[nodiscard]] void RemoveSoftwareBreakpoint() noexcept
     {
         if (!m_IsSet)
             return;
@@ -128,6 +248,68 @@ public:
         m_IsSet = false;
     }
 
+
+    // Removes the currently set hardware breakpoint.
+    [[nodiscard]] void RemoveHardwareBreakpoint() noexcept
+    {
+        if (!m_IsSet || !m_Thread)
+            return;
+
+        CONTEXT ctx {};
+        ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+
+        if (!GetThreadContext( m_Thread, &ctx ))
+            return;
+
+        // Disable this slot.
+        ctx.Dr7 &= ~(0xF << (m_Slot * 4));
+
+        // Clear DRx register.
+        switch (m_Slot)
+        {
+            case 0:
+                ctx.Dr0 = 0;
+                break;
+
+            case 1:
+                ctx.Dr1 = 0;
+                break;
+
+            case 2:
+                ctx.Dr2 = 0;
+                break;
+
+            case 3:
+                ctx.Dr3 = 0;
+                break;
+        }
+
+        SetThreadContext( m_Thread, &ctx );
+
+        m_Address = 0;
+        m_Slot = -1;
+        m_IsSet = false;
+    }
+
+
+    // Removes either software of hardware breakpoint.
+    [[nodiscard]] void RemoveBreakpoint() noexcept
+    {
+        switch (m_BreakpointType)
+        {
+            case BreakpointType::Software:
+            {
+                RemoveSoftwareBreakpoint();
+                break;
+            }
+
+            case BreakpointType::Hardware:
+            {
+                RemoveHardwareBreakpoint();
+                break;
+            }
+        }
+    }
 
     /**
      * @brief Gets the memory address where the breakpoint is set.
@@ -151,12 +333,60 @@ public:
     }
 
 
+    // Sets the breakpoint type.
+    void SetBreakpointType( 
+        const std::int32_t type
+    ) noexcept
+    {
+        switch (type)
+        {
+            case 1:
+            {
+                m_BreakpointType = BreakpointType::Software;
+                break;
+            }
+
+            case 2:
+            {
+                m_BreakpointType = BreakpointType::Hardware;
+                break;
+            }
+        }
+    }
+
+
+    /**
+    * @brief Gets the current breakpoint type.
+    *
+    * @return either 'Software' or 'Hardware'.
+    */
+    [[nodiscard]] BreakpointType GetBreakpointType() const noexcept
+    {
+        return m_BreakpointType;
+    }
+
+
     /**
      * @brief Destructor that automatically removes any active breakpoint.
      */
     ~BreakpointManager() noexcept
     {
         if (m_IsSet)
-            RemoveBreakpoint();
+        {
+            switch (m_BreakpointType)
+            {
+                case BreakpointType::Software:
+                {
+                    RemoveSoftwareBreakpoint();
+                    break;
+                }
+
+                case BreakpointType::Hardware:
+                {
+                    RemoveHardwareBreakpoint();
+                    break;
+                }
+            }
+        }
     }
 };

@@ -9,7 +9,7 @@
  *
  * This software is provided "as is", without warranty of any kind.
  *
- * Full license text available in LICENSE.md
+ * Full license text available in LICENSE
  */
 
 #pragma once
@@ -121,11 +121,9 @@ public:
         std::uint32_t eax
     )
     {
-        if (index < m_JSON["ConstantOrStolen"].size())
-        {
-            auto & entry = m_JSON["ConstantOrStolen"][index];
-            auto & data = entry.begin().value();
-            data["Value"] = std::format( "0x{:08X}", eax );
-        }
+        auto & entry = m_JSON["ConstantOrStolen"][index];
+        auto & data = entry.begin().value();
+
+        data["Value"] = std::format( "0x{:08X}", eax );
     }
 };

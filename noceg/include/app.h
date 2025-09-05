@@ -9,7 +9,7 @@
  *
  * This software is provided "as is", without warranty of any kind.
  *
- * Full license text available in LICENSE.md
+ * Full license text available in LICENSE
  */
 
 #pragma once
@@ -28,6 +28,12 @@ private:
 
     // Manages the lifecycle of the vectored exception handler.
     std::unique_ptr<void, decltype(&RemoveVectoredExceptionHandler)> m_ExceptionHandler;
+
+    // Default image base address used as the reference point.
+    std::uintptr_t m_DefaultImageBase { 0x00400000 };
+
+    // Target image base address of the loaded module.
+    std::uintptr_t m_TargetImageBase { 0x00400000 };
 
     // Memory address of the targeted CEG protected function.
     std::atomic<std::uintptr_t> m_TargetAddress { 0 };
@@ -93,6 +99,37 @@ public:
     static ApplicationManager * GetInstance() noexcept
     {
         return m_Instance;
+    }
+    
+    
+    /**
+    * @brief Sets the default image base value to be used as the reference point.
+    *
+    * @param base The base address to set as the default image base.
+    */
+    void SetDefaultImageBase(
+        const std::uintptr_t base 
+    ) noexcept
+    {
+        m_DefaultImageBase = base;
+    }
+
+
+    /**
+    * @brief Sets the target image base address for a specific module.
+    *
+    *
+    * @param module_name The name of the module.
+    * If empty, the current executable's base address is used.
+    */
+    void SetTargetImageBase(
+        const std::string & module_name
+    ) noexcept
+    {
+        if (!module_name.empty())
+            m_TargetImageBase = reinterpret_cast<std::uintptr_t>(GetModuleHandleA( module_name.data() ));
+        else
+            m_TargetImageBase = reinterpret_cast<std::uintptr_t>(GetModuleHandleA( nullptr ));
     }
 
 
@@ -278,5 +315,34 @@ public:
     CONTEXT * GetContext() const noexcept
     {
         return m_Context.value();
+    }
+    
+    
+    /**
+    * @brief Gets the currently stored target image base address.
+    *
+    * @return The runtime base address of the target module.
+    */
+    std::uintptr_t GetTargetImageBase() const noexcept
+    {
+        return m_TargetImageBase;
+    }
+
+
+    /**
+    * @brief Translates an address from the default image base
+    * to the target image base.
+    *
+    * @param address The address relative to the default image base.
+    * @return The relocated address relative to the target image base.
+    */
+    std::uintptr_t CalculateRealAddress( 
+        const std::uintptr_t address
+    ) const noexcept
+    {
+        if (!address)
+            return 0;
+
+        return (address - m_DefaultImageBase) + m_TargetImageBase;
     }
 };

@@ -9,7 +9,7 @@
  *
  * This software is provided "as is", without warranty of any kind.
  *
- * Full license text available in LICENSE.md
+ * Full license text available in LICENSE
  */
 
 #pragma once
@@ -38,6 +38,45 @@ LONG CALLBACK CEGExceptionHandler(
 
     auto * ctx = ei->ContextRecord;
     const auto code = ei->ExceptionRecord->ExceptionCode;
+
+    // Update the current CEG entry.
+    auto update_ceg_entry = [&state, &ctx]()
+    {
+        LOG_INFO( "Breakpoint just being hit, EAX value is '0x{:08X}'.", ctx->Eax );
+
+        auto & config = state->GetJSON();
+        const auto & json = config.ReadData();
+        const auto index = state->GetCurrentIndex();
+
+        if (index < json["ConstantOrStolen"].size())
+        {
+            // Update the JSON entry with the result value from EAX.
+            config.UpdateEntry( index, ctx->Eax );
+
+            if (auto res = config.SaveJSON(); !res)
+                LOG_WARNING( "Failed to update an entry inside 'noceg.json'." );
+            else
+            {
+                if (json.value( "ShouldRestart", false ))
+                {
+                    LOG_INFO( "Setting the restart flag." );
+                    state->SetShouldRestart();
+
+                    // Change EIP to point to the restart function.
+                    ctx->Eip = reinterpret_cast<DWORD>(RestartApp);
+                }
+                else
+                {
+                    // Restore the previously saved context.
+                    ctx = state->GetContext();
+                    state->SetCurrentIndex( index + 1 );
+
+                    // Continue to next entry.
+                    state->GetEntryProcessorManager().ProcessEntry();
+                }
+            }
+        }
+    };
 
     switch (code)
     {
@@ -68,51 +107,41 @@ LONG CALLBACK CEGExceptionHandler(
                 ctx->EFlags &= ~0x100;
             }
 
+            auto & bp = state->GetBreakpointManager();
+            if (bp.GetBreakpointType() == BreakpointType::Hardware)
+            {
+                if (ctx->Eip == bp.GetAddress())
+                {
+                    if (bp.IsSet())
+                    {
+                        LOG_INFO( "Removing the hardware breakpoint at '0x{:08X}'.", ctx->Eip );
+                        bp.RemoveBreakpoint();
+                    }
+
+                    update_ceg_entry();
+                }
+            }
+
             return EXCEPTION_CONTINUE_EXECUTION;
         }
 
         case EXCEPTION_BREAKPOINT:
         {
             auto & bp = state->GetBreakpointManager();
-            if (ctx->Eip == bp.GetAddress())
+            if (bp.GetBreakpointType() == BreakpointType::Software)
             {
-                bp.RemoveBreakpoint();
-                LOG_INFO( "Breakpoint just being hit, EAX value is '0x{:08X}'.", ctx->Eax );
-
-                auto & config = state->GetJSON();
-                const auto & json = config.ReadData();
-                const auto index = state->GetCurrentIndex();
-
-                if (index < json["ConstantOrStolen"].size())
+                if (ctx->Eip == bp.GetAddress())
                 {
-                    // Update the JSON entry with the result value from EAX.
-                    config.UpdateEntry( index, ctx->Eax );
-
-                    if (auto res = config.SaveJSON(); !res)
-                        LOG_WARNING( "Failed to update an entry inside 'noceg.json'." );
-                    else
+                    if (bp.IsSet())
                     {
-                        if (json.value( "ShouldRestart", false ))
-                        {
-                            LOG_INFO( "Setting the restart flag." );
-                            state->SetShouldRestart();
-
-                            // Change EIP to point to the restart function.
-                            ctx->Eip = reinterpret_cast<DWORD>(RestartApp);
-                        }
-                        else
-                        {
-                            // Restore the previously saved context.
-                            ctx = state->GetContext();
-                            state->SetCurrentIndex( index + 1 );
-
-                            // Continue to next entry.
-                            state->GetEntryProcessorManager().ProcessEntry();
-                        }
+                        LOG_INFO( "Removing the software breakpoint at '0x{:08X}'.", ctx->Eip );
+                        bp.RemoveBreakpoint();
                     }
-                }
 
-                return EXCEPTION_CONTINUE_EXECUTION;
+                    update_ceg_entry();
+
+                    return EXCEPTION_CONTINUE_EXECUTION;
+                }
             }
 
             break;

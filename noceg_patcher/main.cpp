@@ -9,7 +9,7 @@
  *
  * This software is provided "as is", without warranty of any kind.
  *
- * Full license text available in LICENSE.md
+ * Full license text available in LICENSE
  */
 
 #include <windows.h>
@@ -312,7 +312,7 @@ public:
                 std::cerr << "[WARNING] 'ConstantOrStolen' field exists but is not an array." << std::endl;
         }
 
-        // Lambda to parse array based patches ('Integrity' and 'TestSecret').
+        // Lambda to parse array based patches ('RegisterThreads', 'Integrity' and 'TestSecret').
         const auto parse_simple_array = [&]( std::string_view key, std::string_view description ) -> void
         {
             if (j.contains( key ))
@@ -337,6 +337,9 @@ public:
             }
         };
 
+        // Load 'RegisterThreads' patches.
+        parse_simple_array( "RegisterThreads", "CEG RegisterThread functions." );
+
         // Load 'TestSecret' patches.
         parse_simple_array( "TestSecret", "CEG TestSecret functions." );
 
@@ -354,7 +357,8 @@ public:
      * Supports different patch types:
      * 
      * '0' - mov al, 1
-     * '1', '2', '3' - Return fixed value (mov eax, <value>)
+     * '1' - Return fixed value (mov eax, <value>)
+     * '2', '3' - Return calculated address/value from the delta (lea eax, [eax - <delta>])
      * '4' - Jump to the real address (jmp <address>)
      *
      * @param patches Map of patches to apply.
@@ -394,14 +398,41 @@ public:
                     }
              
                     case 1:
-                    case 2:
-                    case 3:
                     {
                         const auto val = static_cast<std::uint32_t>(StringToNumber( info.m_Value ));
 
                         m_FileData[offset] = 0xB8;
                         std::memcpy( &m_FileData[offset + 1], &val, sizeof( val ) );
                         m_FileData[offset + 5] = 0xC3;
+
+                        ++num_applied;
+                        break;
+                    }
+
+                    case 2:
+                    case 3:
+                    {
+                        auto const val = static_cast<std::uint32_t>(StringToNumber( info.m_Value ));
+                        auto const prologue = static_cast<std::uint32_t>(StringToNumber( info.m_Prologue ));
+                        auto const delta = static_cast<std::int32_t>( val - (prologue + 5) );
+
+                        /*
+                        * 
+                        call <address + 5>
+                        pop eax
+                        lea eax, [eax - <delta>]
+                        ret
+                        */
+                        m_FileData[offset] = 0xE8;
+                        m_FileData[offset + 1] = 0x00;
+                        m_FileData[offset + 2] = 0x00;
+                        m_FileData[offset + 3] = 0x00;
+                        m_FileData[offset + 4] = 0x00;
+                        m_FileData[offset + 5] = 0x58;
+                        m_FileData[offset + 6] = 0x8D;
+                        m_FileData[offset + 7] = 0x80;
+                        std::memcpy( &m_FileData[offset + 8], &delta, sizeof( delta ) );
+                        m_FileData[offset + 12] = 0xC3;
 
                         ++num_applied;
                         break;

@@ -116,7 +116,7 @@ public:
 
         // Add core CEG system function addresses.
         j_root["Init"] = std::format( "0x{:08x}", Data::CEG_INIT_LIBRARY_FUNC.as<std::uint32_t>() ); // CEG initialization function.
-        j_root["RegisterThread"] = std::format( "0x{:08x}", Data::CEG_REGISTER_THREAD_FUNC.as<std::uint32_t>() ); // CEG thread registration function.
+        j_root["RegisterThread"] = std::format( "0x{:08x}", Data::CEG_REGISTER_THREAD_FUNC.as<std::uint32_t>() ); // CEG thread registration function (main).
         j_root["Terminate"] = std::format( "0x{:08x}", Data::CEG_TERM_LIBRARY_FUNC.as<std::uint32_t>() ); // CEG terminate function.
         j_root["Version"] = Data::CEG_OLD_VERSION ? 1 : 2; // CEG version.
 
@@ -127,8 +127,17 @@ public:
         // No restart required by default.
         j_root["ShouldRestart"] = false;
 
+        // Set the breakpoint type used by the handler.
+        // '1' is default aka 'Software'.
+        j_root["BreakpointType"] = 1;
+
+        add_funcs( Data::CEG_REGISTER_THREAD_FUNC_FUNCS, "RegisterThreads" );  // CEG thread registration functions (all).
         add_funcs( Data::CEG_INTEGRITY_FUNCS, "Integrity" );
         add_funcs( Data::CEG_TESTSECRET_FUNCS, "TestSecret" );
+
+        // Check for the custom module and decide whether it's a dynamic library.
+        if ((Data::CEG_IMAGEBASE_RAW >= 0x10000000 && !Data::CEG_MODULENAME.empty()))
+            j_root["ModuleName"] = Data::CEG_MODULENAME;
 
         m_JsonFileOut << j_root.dump( 4 );
         m_JsonFileOut.flush();
