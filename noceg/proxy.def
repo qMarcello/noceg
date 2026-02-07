@@ -1,7 +1,10 @@
 ; NoCEG exports.
 EXPORTS
+GetHSteamPipe
+GetHSteamUser
 SteamAPI_GetHSteamPipe
 SteamAPI_GetHSteamUser
+SteamAPI_GetSteamInstallPath
 SteamAPI_Init
 SteamAPI_InitSafe
 SteamAPI_IsSteamRunning
@@ -10,6 +13,7 @@ SteamAPI_RegisterCallResult
 SteamAPI_RestartAppIfNecessary
 SteamAPI_RunCallbacks
 SteamAPI_SetMiniDumpComment
+SteamAPI_SetTryCatchCallbacks
 SteamAPI_Shutdown
 SteamAPI_UnregisterCallback
 SteamAPI_UnregisterCallResult

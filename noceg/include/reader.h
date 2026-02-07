@@ -115,15 +115,20 @@ public:
     *
     * @param index Index in the 'ConstantOrStolen' array to update.
     * @param eax The new value to set.
+    * @param eax_calc The calculated value. Only used for CEG protected/stolen functions.
     */
     void UpdateEntry(
         std::size_t index,
-        std::uint32_t eax
+        std::uint32_t eax,
+        std::uint32_t eax_calc
     )
     {
         auto & entry = m_JSON["ConstantOrStolen"][index];
         auto & data = entry.begin().value();
 
-        data["Value"] = std::format( "0x{:08X}", eax );
+        const auto type = data["Type"].get<int>();
+        const auto value = (type >= 2 && type <= 4) ? eax_calc : eax;
+
+        data["Value"] = std::format( "0x{:08X}", value );
     }
 };

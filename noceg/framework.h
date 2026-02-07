@@ -21,5 +21,8 @@
 namespace fs = std::filesystem;
 
 // JSON for Modern C++ (https://github.com/nlohmann/json)
-#include <json.hpp>
+#include <json/json.hpp>
 using json = nlohmann::json;
+
+// SafetyHook (https://github.com/cursey/safetyhook)
+#include <safetyhook/safetyhook.hpp>

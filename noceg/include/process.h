@@ -16,6 +16,7 @@
 
 #include <Windows.h>
 #include <thread>
+#include <array>
 
 // Enumeration representing possible error states in the application.
 enum class Error
@@ -27,6 +28,7 @@ enum class Error
     JsonParseFailed, // Failed to parse JSON data.
     JsonWriteFailed, // Failed to write JSON data.
     MutexCreateFailed, // Failed to create or acquire a mutex.
+    CEGVersionNotFound, // CEG version field not found.
     CEGInitFunctionNotFound, // CEG init function not found inside JSON.
     CEGRegisterThreadFunctionNotFound // CEG register thread function not found inside JSON.
 };

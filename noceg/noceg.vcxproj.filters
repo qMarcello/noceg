@@ -13,6 +13,15 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\safetyhook">
+      <UniqueIdentifier>{b602a74b-e42f-4c03-9b67-0ad4a9a99fc0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\safetyhook">
+      <UniqueIdentifier>{56e9593f-6770-4086-adfb-b68c0cd8558c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\json">
+      <UniqueIdentifier>{1573671e-5f41-4912-9f32-7202cf81fea4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -48,6 +57,18 @@
     <ClInclude Include="include\handler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\hooks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\safetyhook\safetyhook.hpp">
+      <Filter>Header Files\safetyhook</Filter>
+    </ClInclude>
+    <ClInclude Include="include\safetyhook\Zydis.h">
+      <Filter>Header Files\safetyhook</Filter>
+    </ClInclude>
+    <ClInclude Include="include\json\json.hpp">
+      <Filter>Header Files\json</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -55,6 +76,12 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="include\safetyhook\safetyhook.cpp">
+      <Filter>Source Files\safetyhook</Filter>
+    </ClCompile>
+    <ClCompile Include="include\safetyhook\Zydis.c">
+      <Filter>Source Files\safetyhook</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

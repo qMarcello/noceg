@@ -119,9 +119,9 @@ A modified version will be generated with a suffix like `_noceg.exe` or `_noceg.
 ✔ Deadpool
 ✔ DeathSpank
 ✔ DeathSpank: Thongs Of Virtue
-✔ Duke Nukem: Forever
 ✔ DiRT Showdown
 ✔ DiRT Showdown Demo
+✔ Duke Nukem: Forever
 ✔ F1 2012™
 ✔ F1 Race Stars
 ✔ F.E.A.R. 3
@@ -134,10 +134,12 @@ A modified version will be generated with a suffix like `_noceg.exe` or `_noceg.
 ✔ Kane & Lynch 2: Dog Days Demo
 ✔ Lara Croft and the Guardian of Light
 ✔ Lara Croft and the Guardian of Light Demo
+✔ Left 4 Dead 2
 ✔ Madballs in...Babo: Invasion
 ✔ Madballs in...Babo: Invasion Demo
 ✔ Mafia II
 ✔ Mafia II Demo
+✔ Portal 2
 ✔ Prototype 2
 ✔ Risen 2
 ✔ Risen 2 Demo
@@ -184,7 +186,8 @@ This project uses the following open-source libraries:
 
 - [`nlohmann/json`](https://github.com/nlohmann/json) – JSON for Modern C++  
 - [`mem`](https://github.com/0x1F9F1/mem) – Memory utility helpers  
-- [`zydis`](https://github.com/zyantific/zydis) – Disassembler framework  
+- [`zydis`](https://github.com/zyantific/zydis) – Disassembler framework 
+- [`SafetyHook`](https://github.com/cursey/safetyhook) – C++23 procedure hooking library
 
 ---
 

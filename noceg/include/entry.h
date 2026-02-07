@@ -15,6 +15,7 @@
 #pragma once
 
 #include "app.h"
+#include "hooks.h"
 
 // Manager responsible for processing entries related to CEG protected functions.
 class EntryProcessorManager
@@ -240,6 +241,12 @@ public:
             return std::unexpected { Error::CEGInitFunctionNotFound };
         }
 
+        // Safe check for 'Version' field.
+        if (!json.contains( "Version" ) || !json["Version"].is_number())
+        {
+            return std::unexpected { Error::CEGVersionNotFound };
+        }
+
         const auto ceg_init_addr = static_cast<std::uintptr_t>(std::stoull( json["Init"].get<std::string>(), nullptr, 16 ));
 
         // Safe check for 'RegisterThread' field.
@@ -266,6 +273,11 @@ public:
             if (ceg_version > 1)
                Sleep( 100 );
             */
+            const auto ceg_version = json["Version"].get<std::uint32_t>();
+
+            // Only apply a few WinAPI hooks for older CEG version.
+            if (ceg_version == 1)
+                HookMgr.InstallHooks();
 
             ProcessEntry();
         }

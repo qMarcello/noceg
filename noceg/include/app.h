@@ -126,10 +126,47 @@ public:
         const std::string & module_name
     ) noexcept
     {
-        if (!module_name.empty())
-            m_TargetImageBase = reinterpret_cast<std::uintptr_t>(GetModuleHandleA( module_name.data() ));
-        else
+        if (module_name.empty())
+        {
             m_TargetImageBase = reinterpret_cast<std::uintptr_t>(GetModuleHandleA( nullptr ));
+            return;
+        }
+
+        // Validates that a module exports the 'CreateInterface' function.
+        constexpr auto is_source_engine_dll = []( HMODULE module ) noexcept -> bool
+        {
+            return module != nullptr && GetProcAddress( module, "CreateInterface" ) != nullptr;
+        };
+
+        // Try to get already loaded module.
+        if (HMODULE module = GetModuleHandleA( module_name.c_str() ))
+        {
+            m_TargetImageBase = reinterpret_cast<std::uintptr_t>(module);
+            return;
+        }
+
+        // Module not loaded, try game-specific paths.
+        auto lower_name = module_name | std::views::transform( []( std::uint8_t c )
+        {
+            return std::tolower( c );
+        } ) | std::ranges::to<std::string>();
+
+        if (lower_name == "client.dll" || lower_name == "server.dll")
+        {
+            constexpr std::array games = { "left4dead2", "portal2" };
+
+            for (const auto & game : games)
+            {
+                const auto path = std::format( "..\\{}\\bin\\{}", game, lower_name );
+
+                if (HMODULE module = LoadLibraryA( path.c_str() );
+                    is_source_engine_dll( module ))
+                {
+                    m_TargetImageBase = reinterpret_cast<std::uintptr_t>(module);
+                    return;
+                }
+            }
+        }
     }
 
 
@@ -344,5 +381,23 @@ public:
             return 0;
 
         return (address - m_DefaultImageBase) + m_TargetImageBase;
+    }
+    
+    
+    /**
+    * @brief Translates an address from the target image base
+    * back to the default image base.
+    *
+    * @param address The address relative to the target image base.
+    * @return The relocated address relative to the default image base.
+    */
+    std::uintptr_t CalculateDefaultAddress(
+        const std::uintptr_t address
+    ) const noexcept
+    {
+        if (!address)
+            return 0;
+
+        return (address - m_TargetImageBase) + m_DefaultImageBase;
     }
 };

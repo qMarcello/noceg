@@ -352,6 +352,100 @@ public:
 
 
     /**
+    * @brief Removes relocation entries that fall within a specified file offset range.
+    *
+    * This scans the PE relocation table and neutralizes any relocation entries
+    * that would interfere with patches applied in the given range by converting them
+    * to 'IMAGE_REL_BASED_ABSOLUTE'.
+    *
+    * @param patch_offset The starting file offset of the patch region.
+    * @param range The size in bytes of the patch region.
+    */
+    void RemoveRelocationsInRange(
+        std::uint32_t patch_offset,
+        std::uint32_t range
+    ) noexcept
+    {
+        const auto * dos_header = reinterpret_cast<const IMAGE_DOS_HEADER *>(m_FileData.data());
+        const auto * nt_headers = reinterpret_cast<const IMAGE_NT_HEADERS *>(m_FileData.data() + dos_header->e_lfanew);
+
+        // Locate the relocation directory.
+        const auto & reloc_dir = nt_headers->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+
+        // Early exit if no relocations exist.
+        if (reloc_dir.Size == 0 || reloc_dir.VirtualAddress == 0)
+            return;
+
+        // Convert relocation directory RVA to file offset.
+        const auto reloc_offset = RvaToOffset( reloc_dir.VirtualAddress );
+        if (reloc_offset == 0)
+        {
+            std::cerr << "[WARNING] Failed to locate relocation table in file." << std::endl;
+            return;
+        }
+
+        // Get pointer to the first relocation block.
+        auto * reloc_block = reinterpret_cast<IMAGE_BASE_RELOCATION *>(m_FileData.data() + reloc_offset);
+
+        std::uint32_t processed_size = 0;
+        std::size_t removed_count = 0;
+
+        // Iterate through all relocation blocks.
+        while (processed_size < reloc_dir.Size && reloc_block->SizeOfBlock > 0)
+        {
+            // Calculate number of entries in this block.
+            const auto num_entries = (reloc_block->SizeOfBlock - sizeof( IMAGE_BASE_RELOCATION )) / sizeof( std::uint16_t );
+
+            // Get pointer to the first relocation entry in this block
+            auto * entries = reinterpret_cast<std::uint16_t *>(
+                reinterpret_cast<std::uint8_t *>(reloc_block) + sizeof( IMAGE_BASE_RELOCATION ));
+
+            // Process each relocation entry in the block.
+            for (std::uint32_t i = 0; i < num_entries; ++i)
+            {
+                // Extract type and offset from the entry.
+                const auto type = entries[i] >> 12;
+                const auto offset = entries[i] & 0xFFF;
+
+                // Skip entries that are already marked as absolute.
+                if (type == IMAGE_REL_BASED_ABSOLUTE)
+                    continue;
+
+                // Calculate the RVA and file offset for this relocation.
+                const auto entry_rva = reloc_block->VirtualAddress + offset;
+                const auto entry_file_offset = RvaToOffset( entry_rva );
+
+                // Check if this relocation falls within our patch range.
+                if (entry_file_offset >= patch_offset &&
+                    entry_file_offset < (patch_offset + range))
+                {
+                    // Neutralize the relocation by setting it to 'IMAGE_REL_BASED_ABSOLUTE'.
+                    entries[i] = (IMAGE_REL_BASED_ABSOLUTE << 12) | offset;
+                    ++removed_count;
+
+                    std::cout << std::format(
+                        "[INFO] Removed relocation at file offset '0x{:X}' (RVA: '0x{:X}', Type: '{}').",
+                        entry_file_offset, entry_rva, type ) << std::endl;
+                }
+            }
+
+            // Move to the next relocation block.
+            processed_size += reloc_block->SizeOfBlock;
+
+            reloc_block = reinterpret_cast<IMAGE_BASE_RELOCATION *>(
+                reinterpret_cast<std::uint8_t *>(reloc_block) + reloc_block->SizeOfBlock);
+        }
+
+        if (removed_count > 0)
+            std::cout << std::format( "[SUCCESS] Removed '{}' relocations in range '0x{:X}-0x{:X}'.",
+                removed_count, patch_offset, patch_offset + range ) << std::endl;
+        else
+            std::cout << std::format( "[INFO] No relocations found in range '0x{:X}-0x{:X}'.",
+                patch_offset, patch_offset + range ) << std::endl;
+    }
+
+
+    /**
      * @brief Applies the loaded CEG patches to the file buffer.
      *
      * Supports different patch types:
@@ -434,6 +528,8 @@ public:
                         std::memcpy( &m_FileData[offset + 8], &delta, sizeof( delta ) );
                         m_FileData[offset + 12] = 0xC3;
 
+                        RemoveRelocationsInRange( offset, 13 );
+
                         ++num_applied;
                         break;
                     }
@@ -445,6 +541,8 @@ public:
                         m_FileData[offset] = 0xE9;
                         const auto rel = static_cast<std::int32_t>(dest - (prologue + 5));
                         std::memcpy( &m_FileData[offset + 1], &rel, sizeof( rel ) );
+
+                        RemoveRelocationsInRange( offset, 5 );
 
                         ++num_applied;
                         break;

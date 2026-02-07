@@ -15,8 +15,11 @@
 #pragma once
 
 // Forwarded SteamAPI exports.
+FORWARD_EXPORT_SIMPLE( std::uint32_t, GetHSteamPipe )
+FORWARD_EXPORT_SIMPLE( std::uint32_t, GetHSteamUser )
 FORWARD_EXPORT_SIMPLE( std::uint32_t, SteamAPI_GetHSteamPipe )
 FORWARD_EXPORT_SIMPLE( std::uint32_t, SteamAPI_GetHSteamUser )
+FORWARD_EXPORT_SIMPLE( const char*, SteamAPI_GetSteamInstallPath )
 FORWARD_EXPORT_SIMPLE( bool, SteamAPI_Init )
 FORWARD_EXPORT_SIMPLE( bool, SteamAPI_InitSafe )
 FORWARD_EXPORT_SIMPLE( bool, SteamAPI_IsSteamRunning )
@@ -26,6 +29,8 @@ FORWARD_EXPORT( bool, SteamAPI_RestartAppIfNecessary,
 (uint32_t unOwnAppID), (unOwnAppID) )
 FORWARD_EXPORT_VOID( SteamAPI_SetMiniDumpComment,
     (const char * pchMsg), (pchMsg) )
+FORWARD_EXPORT_VOID( SteamAPI_SetTryCatchCallbacks,
+        (bool bTryCatchCallbacks), (bTryCatchCallbacks) )
 FORWARD_EXPORT_VOID( SteamAPI_WriteMiniDump,
     (uint32_t uStructuredExceptionCode, void * pvExceptionInfo, uint32_t uBuildID), (uStructuredExceptionCode, pvExceptionInfo, uBuildID) )
 FORWARD_EXPORT_VOID( SteamAPI_RegisterCallback,

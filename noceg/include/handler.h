@@ -51,7 +51,7 @@ LONG CALLBACK CEGExceptionHandler(
         if (index < json["ConstantOrStolen"].size())
         {
             // Update the JSON entry with the result value from EAX.
-            config.UpdateEntry( index, ctx->Eax );
+            config.UpdateEntry( index, ctx->Eax, state->CalculateDefaultAddress( ctx->Eax ) );
 
             if (auto res = config.SaveJSON(); !res)
                 LOG_WARNING( "Failed to update an entry inside 'noceg.json'." );
