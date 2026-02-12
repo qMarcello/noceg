@@ -67,6 +67,7 @@ The following titles require `"ShouldRestart": true` in `noceg.json`:
 - Star Trek  
 - F.E.A.R. 3  
 - Risen 2
+- Warhammer 40,000: Space Marine
 
 To enable this option, update your configuration from:
 
@@ -123,6 +124,8 @@ A modified version will be generated with a suffix like `_noceg.exe` or `_noceg.
 ✔ DiRT Showdown Demo
 ✔ Duke Nukem: Forever
 ✔ F1 2012™
+✔ F1 2013™
+✔ F1 2014™
 ✔ F1 Race Stars
 ✔ F.E.A.R. 3
 ✔ GRID 2
@@ -147,6 +150,7 @@ A modified version will be generated with a suffix like `_noceg.exe` or `_noceg.
 ✔ Saints Row IV Inauguration Station
 ✔ Sid Meier's Ace Patrol
 ✔ Sid Meier's Ace Patrol: Pacific Skies
+✔ Sid Meier's Civilization®: Beyond Earth™
 ✔ Sid Meier's Civilization V
 ✔ Sid Meier's Civilization V Demo
 ✔ Sniper Elite V2
@@ -158,22 +162,21 @@ A modified version will be generated with a suffix like `_noceg.exe` or `_noceg.
 ✔ The Darkness II
 ✔ The Darkness II Demo
 ✔ The Lord of the Rings: War in the North
+✔ Total War: SHOGUN 2 Demo
 ✔ Viking: Battle for Asgard
 ✔ Warhammer 40,000: Space Marine
 ✔ Warhammer 40,000: Space Marine Demo
 ✔ XCOM: Enemy Unknown
+✔ XCOM: Enemy Within
 ```
 
 ---
 
 ## 🚫 Unsupported titles
 
-> These are using allocated buffers for CEG protected functions and are **not supported** at this point:
+> This title uses custom encrypted functions and is **not supported** at this point:
 
-- ❌ F1 2013™ / F1 2014™  
-- ❌ Call of Duty®: Black Ops II  
-- ❌ Sid Meier's Civilization®: Beyond Earth™  
-- ❌ XCOM: Enemy Within  
+- ❌ Call of Duty®: Black Ops II
 
 ---
 

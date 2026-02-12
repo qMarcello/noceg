@@ -1,7 +1,7 @@
 ﻿/*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -48,8 +48,8 @@ namespace CEG
         FileWriteError,
         OutputFileCreateError
     };
-    
-    
+
+
     /**
     * @brief Converts an 'Error' enum value to a human readable string description.
     *
@@ -142,6 +142,10 @@ namespace CEG
         // A map of CEG protected constant functions.
         inline std::multimap<mem::pointer, std::tuple<mem::pointer, mem::pointer, mem::pointer>> CEG_PROTECTED_CONSTANT_FUNCS {};
 
+        // Set of CEG protected constant functions that have an associated value.
+        // Only used by the newest CEG version.
+        inline std::set<mem::pointer> CEG_PROTECTED_CONSTANT_FUNCS_VALUES {};
+
         // Functions related to CEG thread registration.
         inline std::unordered_set<mem::pointer> CEG_REGISTER_THREAD_FUNC_FUNCS {};
 
@@ -162,11 +166,22 @@ namespace CEG
 
         // Pointer indicating if this is an older version of CEG.
         inline mem::pointer CEG_OLD_VERSION = nullptr;
+
+        // Indicates if this is the newest version of CEG.
+        inline mem::pointer CEG_NEW_VERSION = nullptr;
+
+        // Breakpoint address for the newest CEG.
+        // 
+        // mov eax,dword ptr ds : [ecx]
+        // not eax
+        // mov dword ptr ds : [ecx], eax <-- 
+        // ret
+        inline mem::pointer CEG_NEW_BREAKPOINT = nullptr;
     }
-    
+
     template<typename T>
     using Result = std::expected<T, Error>;
-    
+
     /**
     * @brief Reads the entire binary file into a string.
     *
@@ -204,7 +219,7 @@ namespace CEG
     * @param size [out] The code section size.
     * @return 'std::expected<void, Error>' Either success or specific error.
     */
-    [[nodiscard]] std::expected<void, Error> LoadBinaryImage( 
+    [[nodiscard]] std::expected<void, Error> LoadBinaryImage(
         std::string_view content,
         void *& address,
         std::uint32_t & size
@@ -320,8 +335,8 @@ namespace CEG
             res = mem::pointer { nullptr };
         }
     }
-    
-    
+
+
     /**
     * @brief Searches for all occurrences of a byte pattern and appends results to a vector.
     *
@@ -352,8 +367,8 @@ namespace CEG
         catch (...)
         {}
     }
-    
-    
+
+
     /**
     * @brief Searches for all occurrences of a byte pattern and appends results to a vector.
     *
@@ -394,7 +409,7 @@ namespace CEG
     * @param size Size in bytes of the memory region to search.
     * @return 'mem::pointer' to the first matching pattern, or nullptr if no patterns match.
     */
-    [[nodiscard]] mem::pointer FindPatternMatch( 
+    [[nodiscard]] mem::pointer FindPatternMatch(
         const auto & patterns,
         void* address,
         DWORD size
@@ -408,8 +423,8 @@ namespace CEG
 
         return nullptr;
     }
-    
-    
+
+
     /**
     * @brief Calculates the real virtual address for the target binary.
     *
@@ -424,8 +439,8 @@ namespace CEG
     {
         return Data::CEG_CODE_BASE + (address_current - reinterpret_cast<std::uint32_t>(address_start));
     }
-    
-    
+
+
     /**
     * @brief Transforms a range of memory addresses to their corresponding real addresses.
     *
@@ -467,8 +482,8 @@ namespace CEG
 
         addresses = std::move( transformed );
     }
-    
-    
+
+
     /**
     * @brief Transforms a single memory address to its corresponding real address.
     *
@@ -502,8 +517,8 @@ namespace CEG
 
         return Data::CEG_IMAGEBASE_MEMORY + rva;
     }
-    
-    
+
+
     /**
     * @brief Calculates the relative virtual address between two virtual addresses.
     *

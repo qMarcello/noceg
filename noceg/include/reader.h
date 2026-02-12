@@ -1,7 +1,7 @@
 /*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -116,19 +116,36 @@ public:
     * @param index Index in the 'ConstantOrStolen' array to update.
     * @param eax The new value to set.
     * @param eax_calc The calculated value. Only used for CEG protected/stolen functions.
+    * @param version The CEG version.
+    * @param base The default module image base.
+    * @param image_size The image size.
     */
     void UpdateEntry(
         std::size_t index,
         std::uint32_t eax,
-        std::uint32_t eax_calc
+        std::uint32_t eax_calc,
+        std::uint32_t version,
+        std::uintptr_t base,
+        std::uint32_t image_size
     )
     {
         auto & entry = m_JSON["ConstantOrStolen"][index];
         auto & data = entry.begin().value();
 
         const auto type = data["Type"].get<int>();
-        const auto value = (type >= 2 && type <= 4) ? eax_calc : eax;
+
+        std::uint32_t value = eax;
+
+        if (version == 3 && type == 4)
+            value = eax + static_cast<std::uint32_t>(base);
+
+        else if (type >= 2 && type <= 4)
+            value = eax_calc;
 
         data["Value"] = std::format( "0x{:08X}", value );
+
+        // Identify the value as the possible address for CEG function types '2' and '3'.
+        if (type == 2 || type == 3)
+            data["IsAddress"] = (value >= base && value < base + image_size);
     }
 };

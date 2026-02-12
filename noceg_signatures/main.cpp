@@ -1,7 +1,7 @@
 ﻿/*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -14,7 +14,7 @@
 
 #include <iostream>
 
-// https://github.com/0x1F9F1/mem
+ // https://github.com/0x1F9F1/mem
 #include <mem/pattern.h>
 #include <mem/pattern_cache.h>
 
@@ -44,9 +44,9 @@ namespace std
 
 using namespace CEG;
 
-int main( 
+int main(
     int argc,
-    char * argv[] 
+    char * argv[]
 )
 {
     std::cout << "CEG signatures finder by iArtorias (https://github.com/iArtorias)." << std::endl << std::endl;
@@ -96,6 +96,30 @@ int main(
 
         if (Data::CEG_OLD_VERSION)
             std::cout << "[WARNING] Older CEG version found." << std::endl;
+        else
+        {
+            // Find out if this is the newest CEG.
+            FindFunction( "8B 54 24 04 8B BA 9C 00 00 00 8B B2 A0 00 00 00 8B 9A A4 00 00 00 8B 8A AC 00 00 00 8B 82 B0 00 00 00 8B AA B4 00 00 00 8B A2 C4 00 00 00 FF B2 B8 00 00 00 8B 92 A8 00 00 00 C3",
+                address, size, Data::CEG_NEW_VERSION );
+
+            if (Data::CEG_NEW_VERSION)
+            {
+                std::cout << "[WARNING] Newest CEG version found." << std::endl;
+
+                // Find the final CEG calculations function.
+                FindFunction( "8B 01 F7 D0 89 01 C3", address, size, Data::CEG_NEW_BREAKPOINT );
+
+                if (!Data::CEG_NEW_BREAKPOINT)
+                {
+                    std::cout << "[ERROR] CEG final calculations function not found." << std::endl;
+                    std::cin.get();
+                    return 1;
+                }
+
+                Data::CEG_NEW_BREAKPOINT = TransformToRealAddress( address, Data::CEG_NEW_BREAKPOINT );
+                Data::CEG_NEW_BREAKPOINT = mem::pointer( Data::CEG_NEW_BREAKPOINT.as<std::uint32_t>() + 4 ); // mov dword ptr ds : [ecx], eax
+            }
+        }
 
         // Find CEG init function.
         Data::CEG_INIT_LIBRARY_FUNC = FindPatternMatch( CEG_INIT_LIBRARY_FUNC_PATTERNS, address, size );
@@ -132,9 +156,9 @@ int main(
         // Find all CEG protected functions for the further analysis.
         std::vector<mem::pointer> ceg_protect;
         for (auto & pattern : CEG_PROTECT_PATTERNS)
-            FindFunctions( pattern, address, size, ceg_protect);
+            FindFunctions( pattern, address, size, ceg_protect );
 
-        if (!ceg_protect.empty())
+        if (!ceg_protect.empty() || Data::CEG_NEW_VERSION)
         {
             auto analyzer = std::make_unique<InstructionAnalyzer>();
 

@@ -1,7 +1,7 @@
 /*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -17,7 +17,7 @@
 #include "app.h"
 #include "hooks.h"
 
-// Manager responsible for processing entries related to CEG protected functions.
+ // Manager responsible for processing entries related to CEG protected functions.
 class EntryProcessorManager
 {
 private:
@@ -33,7 +33,7 @@ public:
     explicit EntryProcessorManager( ApplicationManager * app )
         : m_AppManager( app )
     {}
-    
+
 
     /**
     * @brief Main loop to process the current JSON entry containing CEG function info.
@@ -62,6 +62,7 @@ public:
         }
 
         const auto & constant_or_stolen_funcs = json["ConstantOrStolen"];
+        const auto ceg_version = json.value( "Version", 2 );
 
         for (std::size_t i = m_AppManager->GetCurrentIndex(); i < constant_or_stolen_funcs.size(); ++i)
         {
@@ -139,7 +140,8 @@ public:
                     m_AppManager->SetTargetAddress( m_AppManager->CalculateRealAddress( func_addr ) );
                     m_AppManager->SetEipAddress( m_AppManager->CalculateRealAddress( eip_addr ) );
 
-                    bp.SetBreakpoint( m_AppManager->CalculateRealAddress( bp_addr ) );
+                    if (ceg_version != 3)
+                        bp.SetBreakpoint( m_AppManager->CalculateRealAddress( bp_addr ) );
 
                     const auto type = data["Type"].get<int>();
 
@@ -168,6 +170,9 @@ public:
                                 const auto register_thread = reinterpret_cast<CEG_RegisterThread_t>(ceg_registerthread_addr);
                                 register_thread();
                             }
+
+                            if (ceg_version == 3)
+                                bp.SetBreakpoint( m_AppManager->CalculateRealAddress( bp_addr ) );
 
                             RaiseException( m_CustomExceptionCode, 0, 0, nullptr );
                             break;

@@ -1,7 +1,7 @@
 /*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -14,7 +14,7 @@
 
 #pragma once
 
-// Automatically restarts the current application if the restart flag is set.
+ // Automatically restarts the current application if the restart flag is set.
 static void RestartApp()
 {
     auto * state = ApplicationManager::GetInstance();
@@ -51,7 +51,8 @@ LONG CALLBACK CEGExceptionHandler(
         if (index < json["ConstantOrStolen"].size())
         {
             // Update the JSON entry with the result value from EAX.
-            config.UpdateEntry( index, ctx->Eax, state->CalculateDefaultAddress( ctx->Eax ) );
+            config.UpdateEntry( index, ctx->Eax, state->CalculateDefaultAddress( ctx->Eax ),
+                json.value( "Version", 2 ), state->GetDefaultImageBase(), state->GetImageSize() );
 
             if (auto res = config.SaveJSON(); !res)
                 LOG_WARNING( "Failed to update an entry inside 'noceg.json'." );

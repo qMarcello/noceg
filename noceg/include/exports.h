@@ -1,7 +1,7 @@
 /*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -15,6 +15,7 @@
 #pragma once
 
 // Forwarded SteamAPI exports.
+FORWARD_EXPORT_SIMPLE( void *, g_pSteamClientGameServer )
 FORWARD_EXPORT_SIMPLE( std::uint32_t, GetHSteamPipe )
 FORWARD_EXPORT_SIMPLE( std::uint32_t, GetHSteamUser )
 FORWARD_EXPORT_SIMPLE( std::uint32_t, SteamAPI_GetHSteamPipe )
@@ -57,6 +58,8 @@ FORWARD_EXPORT_SIMPLE( void *, SteamGameServer )
 FORWARD_EXPORT_SIMPLE( void *, SteamGameServerNetworking )
 FORWARD_EXPORT_SIMPLE( void *, SteamGameServerUtils )
 FORWARD_EXPORT_SIMPLE( bool, SteamGameServer_BSecure )
+FORWARD_EXPORT_SIMPLE( std::uint32_t, SteamGameServer_GetHSteamPipe )
+FORWARD_EXPORT_SIMPLE( std::uint32_t, SteamGameServer_GetHSteamUser )
 FORWARD_EXPORT_SIMPLE( std::uint64_t, SteamGameServer_GetSteamID )
 FORWARD_EXPORT( bool, SteamGameServer_Init,
     (std::uint32_t unIP, std::uint16_t usSteamPort, std::uint16_t usGamePort, std::uint16_t usQueryPort, int eServerMode,

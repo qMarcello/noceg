@@ -1,7 +1,7 @@
 /*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -42,6 +42,9 @@ struct PatchInfo
 
     // Type of the CEG function.
     std::string m_Value;
+
+    // Determine if the value is an actual address.
+    bool m_IsAddress { false };
 };
 
 class Patcher
@@ -289,6 +292,12 @@ public:
                     info.m_Value = data["Value"].get<std::string>();
                 }
 
+                // Check if the value is an actual address.
+                if (data.contains( "IsAddress" ) && data["IsAddress"].is_boolean())
+                {
+                    info.m_IsAddress = data["IsAddress"].get<bool>();
+                }
+
                 // Only add patch if prologue is valid.
                 if (!info.m_Prologue.empty())
                 {
@@ -510,27 +519,41 @@ public:
                         auto const prologue = static_cast<std::uint32_t>(StringToNumber( info.m_Prologue ));
                         auto const delta = static_cast<std::int32_t>( val - (prologue + 5) );
 
-                        /*
-                        * 
-                        call <address + 5>
-                        pop eax
-                        lea eax, [eax - <delta>]
-                        ret
-                        */
-                        m_FileData[offset] = 0xE8;
-                        m_FileData[offset + 1] = 0x00;
-                        m_FileData[offset + 2] = 0x00;
-                        m_FileData[offset + 3] = 0x00;
-                        m_FileData[offset + 4] = 0x00;
-                        m_FileData[offset + 5] = 0x58;
-                        m_FileData[offset + 6] = 0x8D;
-                        m_FileData[offset + 7] = 0x80;
-                        std::memcpy( &m_FileData[offset + 8], &delta, sizeof( delta ) );
-                        m_FileData[offset + 12] = 0xC3;
+                        if (info.m_IsAddress)
+                        {
+                            /*
+                            *
+                            call <address + 5>
+                            pop eax
+                            lea eax, [eax - <delta>]
+                            ret
+                            */
+                            m_FileData[offset] = 0xE8;
+                            m_FileData[offset + 1] = 0x00;
+                            m_FileData[offset + 2] = 0x00;
+                            m_FileData[offset + 3] = 0x00;
+                            m_FileData[offset + 4] = 0x00;
+                            m_FileData[offset + 5] = 0x58;
+                            m_FileData[offset + 6] = 0x8D;
+                            m_FileData[offset + 7] = 0x80;
+                            std::memcpy( &m_FileData[offset + 8], &delta, sizeof( delta ) );
+                            m_FileData[offset + 12] = 0xC3;
 
-                        RemoveRelocationsInRange( offset, 13 );
+                            RemoveRelocationsInRange( offset, 13 );
 
-                        ++num_applied;
+                            ++num_applied;
+                        }
+                        else
+                        {
+                            const auto val = static_cast<std::uint32_t>(StringToNumber( info.m_Value ));
+
+                            m_FileData[offset] = 0xB8;
+                            std::memcpy( &m_FileData[offset + 1], &val, sizeof( val ) );
+                            m_FileData[offset + 5] = 0xC3;
+
+                            ++num_applied;
+                        }
+
                         break;
                     }
 

@@ -1,5 +1,6 @@
 ; NoCEG exports.
 EXPORTS
+g_pSteamClientGameServer
 GetHSteamPipe
 GetHSteamUser
 SteamAPI_GetHSteamPipe
@@ -23,6 +24,8 @@ SteamClient
 SteamFriends
 SteamGameServer
 SteamGameServer_BSecure
+SteamGameServer_GetHSteamPipe
+SteamGameServer_GetHSteamUser
 SteamGameServer_GetSteamID
 SteamGameServer_Init
 SteamGameServer_RunCallbacks

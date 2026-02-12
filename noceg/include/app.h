@@ -1,7 +1,7 @@
 /*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -34,6 +34,9 @@ private:
 
     // Target image base address of the loaded module.
     std::uintptr_t m_TargetImageBase { 0x00400000 };
+
+    // The current module image size.
+    std::uintptr_t m_ImageSize { 0 };
 
     // Memory address of the targeted CEG protected function.
     std::atomic<std::uintptr_t> m_TargetAddress { 0 };
@@ -126,9 +129,19 @@ public:
         const std::string & module_name
     ) noexcept
     {
+        auto set_image_size = [this]( const HMODULE & mod )
+        {
+            // Read image size from PE header.
+            if (const auto image_size = GetModuleImageSize( mod ))
+                m_ImageSize = image_size;
+        };
+
         if (module_name.empty())
         {
-            m_TargetImageBase = reinterpret_cast<std::uintptr_t>(GetModuleHandleA( nullptr ));
+            const HMODULE module = GetModuleHandleA( nullptr );
+            m_TargetImageBase = reinterpret_cast<std::uintptr_t>(module);
+
+            set_image_size( module );
             return;
         }
 
@@ -142,6 +155,8 @@ public:
         if (HMODULE module = GetModuleHandleA( module_name.c_str() ))
         {
             m_TargetImageBase = reinterpret_cast<std::uintptr_t>(module);
+
+            set_image_size( module );
             return;
         }
 
@@ -163,6 +178,8 @@ public:
                     is_source_engine_dll( module ))
                 {
                     m_TargetImageBase = reinterpret_cast<std::uintptr_t>(module);
+
+                    set_image_size( module );
                     return;
                 }
             }
@@ -356,6 +373,17 @@ public:
     
     
     /**
+    * @brief Gets the default image base address.
+    *
+    * @return The base address of the module.
+    */
+    std::uintptr_t GetDefaultImageBase() const noexcept
+    {
+        return m_DefaultImageBase;
+    }
+    
+    
+    /**
     * @brief Gets the currently stored target image base address.
     *
     * @return The runtime base address of the target module.
@@ -385,6 +413,40 @@ public:
     
     
     /**
+    * @brief Gets the size of image from a module's PE header.
+    */
+    [[nodiscard]] std::uintptr_t GetModuleImageSize(
+        HMODULE module
+    ) noexcept
+    {
+        if (!module)
+            return 0;
+
+        const auto dos_header = reinterpret_cast<PIMAGE_DOS_HEADER>(module);
+        if (dos_header->e_magic != IMAGE_DOS_SIGNATURE)
+            return 0;
+
+        const auto nt_headers = reinterpret_cast<PIMAGE_NT_HEADERS>(
+            reinterpret_cast<std::uintptr_t>(module) + dos_header->e_lfanew);
+
+        if (nt_headers->Signature != IMAGE_NT_SIGNATURE)
+            return 0;
+
+        return static_cast<std::uintptr_t>(
+            nt_headers->OptionalHeader.SizeOfImage);
+    }
+    
+    
+    /**
+    * @brief Gets the size of image from a module's PE header.
+    */
+    [[nodiscard]] std::uintptr_t GetImageSize()
+    {
+        return m_ImageSize;
+    }
+    
+    
+    /**
     * @brief Translates an address from the target image base
     * back to the default image base.
     *
@@ -398,6 +460,15 @@ public:
         if (!address)
             return 0;
 
-        return (address - m_TargetImageBase) + m_DefaultImageBase;
+        const auto size = m_ImageSize > 0 ? m_ImageSize : 0x02000000;
+
+        const bool is_in_target_range =
+            (address >= m_TargetImageBase) &&
+            (address < m_TargetImageBase + size);
+
+        if (is_in_target_range)
+            return (address - m_TargetImageBase) + m_DefaultImageBase;
+
+        return address;
     }
 };

@@ -1,7 +1,7 @@
 /*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -35,12 +35,20 @@ private:
         "E8 ?? ?? ?? ?? 8D ?? ?? ?? E8 ?? ?? ?? ?? 5F",
     };
 
+    // Pattern for the newest CEG constant/protect functions.
+    static constexpr std::string_view CEG_NEW_CONSTANT_FUNC_PATTERN =
+        "55 8B EC ?? EC ?? ?? ?? ?? 8D 85 ?? ?? ?? ?? 50 E8 ?? ?? ?? ?? 8B 15 ?? ?? ?? ?? 8B 0D";
+
+    // Pattern for the newest CEG outer wrapper functions.
+    static constexpr std::string_view CEG_NEW_PROTECT_PATTERN =
+        "55 8B EC 8D 85 ?? ?? ?? ?? 81 EC ?? ?? ?? ?? 50 E8 ?? ?? ?? ?? 8D 4D ?? 51";
+
     // Offset values to append when corresponding patterns are found.
     // Used to set a breakpoint right after the function execution.
     static constexpr std::array<std::uint32_t, 6> FINALIZE_CRC_OFFSETS = { 16, 13, 14, 13, 16, 14 };
 
 private:
-    
+
     /**
     * @brief Processes a single instruction at the given offset.
     *
@@ -77,8 +85,8 @@ private:
         offset += 1;
         return true;
     }
-    
-    
+
+
     /**
     * @brief Determines if an instruction is of interest for the further analysis.
     *
@@ -100,8 +108,8 @@ private:
                 operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
                 operands[0].reg.value == ZYDIS_REGISTER_EAX);
     }
-    
-    
+
+
     /**
     * @brief Processes instructions that match our target.
     *
@@ -140,7 +148,7 @@ private:
         if (std::ranges::find( protect_funcs, call_target_ptr ) != protect_funcs.end())
             ProcessProtectedFunction( current_address, call_target, address, offset );
     }
-    
+
 
     /**
     * @brief Analyzes a CEG protected function to determine its type.
@@ -160,6 +168,29 @@ private:
         const auto next_instruction_address = current_address + 5;
         const auto * next_instruction_ptr = reinterpret_cast<const std::uint8_t *>(next_instruction_address);
 
+        std::uint32_t scan_offset = 0;
+        const auto * func_base = reinterpret_cast<const std::uint8_t *>(target_func);
+
+        while (scan_offset < Data::CEG_SCAN_SIZE)
+        {
+            ZydisDecodedInstruction instruction;
+            ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+
+            if (!ZYAN_SUCCESS( ZydisDecoderDecodeFull( &m_Decoder,
+                func_base + scan_offset,
+                ZYDIS_MAX_INSTRUCTION_LENGTH,
+                &instruction,
+                operands ) ))
+                break;
+
+            // Stop at function boundaries.
+            if (instruction.mnemonic == ZYDIS_MNEMONIC_RET ||
+                instruction.mnemonic == ZYDIS_MNEMONIC_INT3)
+                break;
+
+            scan_offset += instruction.length;
+        }
+
         std::atomic_bool found = false;
 
         // Pattern match using ranges to find the finalize CRC function.
@@ -167,7 +198,7 @@ private:
         {
             if (auto finalize_crc = FindFunction( pattern,
                 reinterpret_cast<const void *>(target_func),
-                Data::CEG_SCAN_SIZE );
+                scan_offset );
                 finalize_crc.as<std::uint32_t>() != 0)
             {
                 // Calculate the breakpoint address using the pattern offset.
@@ -262,8 +293,8 @@ private:
         // Prologue not found.
         return mem::pointer { nullptr };
     }
-    
-    
+
+
     /**
     * Analyzes and categorizes CEG protected functions based on their instruction patterns and CEG version.
     *
@@ -333,6 +364,245 @@ private:
         }
     }
 
+
+    /**
+    * @brief Resolves the second call target within an outer wrapper, which is the middle subroutine.
+    *
+    * @param func_address The address of the outer wrapper function.
+    * @return The address of the middle subroutine, or '0' if not found.
+    */
+    [[nodiscard]] std::uint32_t ResolveMiddleSubroutine(
+        std::uint32_t func_address
+    ) noexcept
+    {
+        std::uint32_t call_count = 0;
+        std::uint32_t offset = 0;
+
+        while (offset < Data::CEG_SCAN_SIZE)
+        {
+            ZydisDecodedInstruction instruction;
+            ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+
+            if (!ZYAN_SUCCESS( ZydisDecoderDecodeFull( &m_Decoder,
+                reinterpret_cast<const void *>( func_address + offset ),
+                ZYDIS_MAX_INSTRUCTION_LENGTH,
+                &instruction,
+                operands ) ))
+            {
+                ++offset;
+                continue;
+            }
+
+            if (instruction.mnemonic == ZYDIS_MNEMONIC_CALL &&
+                operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE)
+            {
+                ++call_count;
+
+                // The second call is the one to the middle subroutine.
+                if (call_count == 2)
+                {
+                    return func_address + offset +
+                        static_cast<std::uint32_t>(operands[0].imm.value.s + instruction.length);
+                }
+            }
+
+            offset += instruction.length;
+        }
+
+        return 0;
+    }
+
+
+    /**
+    * @brief Finds the call to the inner CEG function within a middle subroutine,
+    * and checks if 'push edx' instruction precedes it.
+    *
+    * @param middle_address The address of the middle subroutine.
+    * @param inner_funcs List of known inner CEG function addresses.
+    * @param [out] inner_target The inner CEG function address if found.
+    * @return 'true' if 'push edx' precedes the call, 'false' otherwise.
+    */
+    [[nodiscard]] bool AnalyzeMiddleSubroutine(
+        std::uint32_t middle_address,
+        std::span<const mem::pointer> inner_funcs,
+        std::uint32_t & inner_target
+    ) noexcept
+    {
+        std::uint32_t offset = 0;
+
+        while (offset < Data::CEG_SCAN_SIZE)
+        {
+            ZydisDecodedInstruction instruction;
+            ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+
+            if (!ZYAN_SUCCESS( ZydisDecoderDecodeFull( &m_Decoder,
+                reinterpret_cast<const void *>( middle_address + offset ),
+                ZYDIS_MAX_INSTRUCTION_LENGTH,
+                &instruction,
+                operands ) ))
+            {
+                ++offset;
+                continue;
+            }
+
+            if (instruction.mnemonic != ZYDIS_MNEMONIC_CALL ||
+                operands[0].type != ZYDIS_OPERAND_TYPE_IMMEDIATE)
+            {
+                offset += instruction.length;
+                continue;
+            }
+
+            const auto call_target = middle_address + offset +
+                static_cast<std::uint32_t>(operands[0].imm.value.s + instruction.length);
+
+            auto call_target_ptr = mem::pointer( call_target );
+
+            // Check if this call targets one of the inner CEG functions.
+            if (std::ranges::find( inner_funcs, call_target_ptr ) == inner_funcs.end())
+            {
+                offset += instruction.length;
+                continue;
+            }
+
+            inner_target = call_target;
+
+            // Check for 'push edx' instruction before the call.
+            if (offset > 0)
+            {
+                const auto * prev_byte = reinterpret_cast<const std::uint8_t *>(middle_address + offset - 1);
+
+                if (*prev_byte == 0x52)
+                    return true;
+            }
+
+            return false;
+        }
+
+        inner_target = 0;
+        return false;
+    }
+
+
+    /**
+    * @brief Analyzes the newest CEG functions.
+    *
+    * @param data The binary data to analyze.
+    * @param address Base address of the data in memory.
+    * @param inner_funcs List of found inner CEG function addresses.
+    * @param outer_wrappers List of found outer wrapper addresses.
+    */
+    void AnalyzeNewCEGConstantFunctions(
+        std::span<const std::byte> data,
+        const void * address,
+        std::span<const mem::pointer> inner_funcs,
+        std::span<const mem::pointer> outer_wrappers
+    ) noexcept
+    {
+        // Track which inner functions have been resolved via outer wrappers.
+        std::set<std::uint32_t> resolved_inner;
+
+        for (const auto & wrapper_ptr : outer_wrappers)
+        {
+            const auto wrapper_addr = wrapper_ptr.as<std::uint32_t>();
+            auto eip = CalculateRealAddress( address, wrapper_addr );
+
+            // Find the middle subroutine.
+            // This should be the second call in the outer wrapper.
+            auto middle_addr = ResolveMiddleSubroutine( wrapper_addr );
+
+            if (middle_addr == 0)
+            {
+                std::cout << std::format( "[WARNING] Could not resolve middle subroutine for outer wrapper: '0x{:08x}'.",
+                    eip.as<std::uint32_t>() ) << std::endl;
+                continue;
+            }
+
+            // Inside the middle subroutine, find the call to the inner CEG function.
+            std::uint32_t inner_addr = 0;
+            bool is_protected = AnalyzeMiddleSubroutine( middle_addr, inner_funcs, inner_addr );
+
+            if (inner_addr == 0)
+                continue;
+
+            resolved_inner.insert( inner_addr );
+
+            auto func = CalculateRealAddress( address, inner_addr );
+            auto bp = Data::CEG_NEW_BREAKPOINT;
+
+            if (is_protected)
+            {
+                // Protected/stolen CEG function.
+                // Prologue is the EIP.
+                Data::CEG_PROTECTED_STOLEN_FUNCS_v3.emplace( func, std::make_tuple( eip, eip, bp ) );
+            }
+            else
+            {
+                // Constant CEG function.
+                if (!Data::CEG_PROTECTED_CONSTANT_FUNCS.contains( func ))
+                {
+                    Data::CEG_PROTECTED_CONSTANT_FUNCS.emplace( func, std::make_tuple( func, eip, bp ) );
+                    Data::CEG_PROTECTED_CONSTANT_FUNCS_VALUES.insert( func );
+                }
+            }
+        }
+
+        // Build a set of all call targets in the binary for reference checking.
+        std::unordered_set<std::uint32_t> all_call_targets;
+        {
+            const auto base = reinterpret_cast<std::uint32_t>(address);
+            for (std::uint32_t offset = 0; offset + ZYDIS_MAX_INSTRUCTION_LENGTH < data.size(); ++offset)
+            {
+                ZydisDecodedInstruction instruction;
+                ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+
+                if (!ZYAN_SUCCESS( ZydisDecoderDecodeFull( &m_Decoder,
+                    reinterpret_cast<const void *>( data.data() + offset ),
+                    ZYDIS_MAX_INSTRUCTION_LENGTH,
+                    &instruction,
+                    operands ) ))
+                    continue;
+
+                if (instruction.mnemonic == ZYDIS_MNEMONIC_CALL &&
+                    operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE)
+                {
+                    const auto call_target = base + offset +
+                        static_cast<std::uint32_t>(operands[0].imm.value.s + instruction.length);
+
+                    all_call_targets.insert( call_target );
+
+                    // Check for the first register thread CEG occurrence.
+                    if (!Data::CEG_REGISTER_THREAD_FUNC && !Data::CEG_REGISTER_THREAD_FUNC_FUNCS.empty())
+                    {
+                        auto call_target_ptr = mem::pointer( call_target );
+
+                        if (Data::CEG_REGISTER_THREAD_FUNC_FUNCS.contains( call_target_ptr ))
+                            Data::CEG_REGISTER_THREAD_FUNC = call_target_ptr;
+                    }
+                }
+            }
+        }
+
+        // Inner CEG functions not resolved through outer wrappers should be treated as constants.
+        // Functions with at least one call reference are assigned the value '0x00000001'.
+        // This includes the infamous CPUID checks.
+        for (const auto & func_ptr : inner_funcs)
+        {
+            auto func = CalculateRealAddress( address, func_ptr.as<std::uint32_t>() );
+
+            if (!Data::CEG_PROTECTED_CONSTANT_FUNCS.contains( func ) &&
+                !Data::CEG_PROTECTED_STOLEN_FUNCS_v3.contains( func ))
+            {
+                auto eip = CalculateRealAddress( address, func_ptr.as<std::uint32_t>() );
+                auto bp = Data::CEG_NEW_BREAKPOINT;
+
+                Data::CEG_PROTECTED_CONSTANT_FUNCS.emplace( func, std::make_tuple( func, eip, bp ) );
+
+                if (all_call_targets.contains( func_ptr.as<std::uint32_t>() ))
+                    Data::CEG_PROTECTED_CONSTANT_FUNCS_VALUES.insert( func );
+            }
+        }
+    }
+
 public:
 
     InstructionAnalyzer()
@@ -344,8 +614,8 @@ public:
             throw std::runtime_error( "Failed to initialize Zydis decoder." );
         }
     }
-    
-    
+
+
     /**
     * @brief Analyzes binary data to identify CEG protected functions.
      *
@@ -360,8 +630,31 @@ public:
         std::span<const mem::pointer> funcs
     ) noexcept
     {
-        std::uint32_t offset = 0;
         const auto size = static_cast<std::uint32_t>(data.size());
+
+        // For the newest CEG version, use the dedicated analysis path.
+        if (Data::CEG_NEW_VERSION)
+        {
+            // Find inner CEG functions.
+            std::vector<mem::pointer> inner_funcs;
+            FindFunctions( CEG_NEW_CONSTANT_FUNC_PATTERN, address, size, inner_funcs );
+
+            if (inner_funcs.empty())
+                return false;
+
+            // Find outer wrapper functions.
+            std::vector<mem::pointer> outer_wrappers;
+            FindFunctions( CEG_NEW_PROTECT_PATTERN, address, size, outer_wrappers );
+
+            if (outer_wrappers.empty())
+                return false;
+
+            AnalyzeNewCEGConstantFunctions( data, address, inner_funcs, outer_wrappers );
+            return true;
+        }
+
+        // Older CEG analysis path.
+        std::uint32_t offset = 0;
 
         while (offset < size)
         {

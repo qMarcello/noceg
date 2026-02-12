@@ -1,7 +1,7 @@
 /*
  * This software is licensed under the NoCEG Non-Commercial Copyleft License.
  *
- * Copyright (C) 2025 iArtorias <iartorias.re@gmail.com>
+ * Copyright (C) 2025-2026 iArtorias <iartorias.re@gmail.com>
  *
  * You may use, copy, modify, and distribute this software non-commercially only.
  * If you distribute binaries or run it as a service, you must also provide
@@ -25,7 +25,7 @@ private:
     std::ofstream m_JsonFileOut;
 
 public:
-    
+
     /**
     * @brief Constructs the class and opens the specified file for writing.
     *
@@ -45,13 +45,13 @@ public:
     JsonWriter & operator=( const JsonWriter & ) = delete;
     JsonWriter( JsonWriter && ) = default;
     JsonWriter & operator=( JsonWriter && ) = default;
-    
+
 
     /**
     * @brief Writes all CEG data to the JSON file in a structured format.
     *
     * This method serializes various types of CEG functions:
-    * 
+    *
     * - CEG protected constant functions.
     * - CEG protected stolen/masked functions.
     * - CEG integrity check functions.
@@ -64,7 +64,7 @@ public:
     {
         json j_root;
         json j_array_protected = json::array();
-        
+
         /**
         * @brief Lambda function to add CEG protected functions to the JSON array.
         *
@@ -78,6 +78,11 @@ public:
                 // Unpack the tuple of the prologue, EIP and BP.
                 auto [prologue, eip, bp] = eip_bp;
 
+                // Check if this CEG constant function has an associated value.
+                std::string value = "0x00000000";
+                if (type == 1 && Data::CEG_PROTECTED_CONSTANT_FUNCS_VALUES.contains( func ))
+                    value = "0x00000001";
+
                 j_array_protected.push_back( {
                     {
                         std::format( "0x{:08x}", func.as<std::uint32_t>() ),
@@ -85,14 +90,14 @@ public:
                             { "Prologue", std::format( "0x{:08x}", prologue.as<std::uint32_t>() ) }, // Function prologue address.
                             { "EIP", std::format( "0x{:08x}", eip.as<std::uint32_t>() ) }, // Current entry point address.
                             { "BP", std::format( "0x{:08x}", bp.as<std::uint32_t>() ) }, // Software breakpoint address.
-                            { "Value", "0x00000000" }, // Default CEG value.
+                            { "Value", value }, // CEG value.
                             { "Type", type }, // CEG function type.
                         }
                     }
                     } );
             }
         };
-        
+
         /**
         * @brief Lambda function to add miscellaneous CEG functions to the root JSON.
         *
@@ -118,7 +123,7 @@ public:
         j_root["Init"] = std::format( "0x{:08x}", Data::CEG_INIT_LIBRARY_FUNC.as<std::uint32_t>() ); // CEG initialization function.
         j_root["RegisterThread"] = std::format( "0x{:08x}", Data::CEG_REGISTER_THREAD_FUNC.as<std::uint32_t>() ); // CEG thread registration function (main).
         j_root["Terminate"] = std::format( "0x{:08x}", Data::CEG_TERM_LIBRARY_FUNC.as<std::uint32_t>() ); // CEG terminate function.
-        j_root["Version"] = Data::CEG_OLD_VERSION ? 1 : 2; // CEG version.
+        j_root["Version"] = Data::CEG_OLD_VERSION ? 1 : (Data::CEG_NEW_VERSION ? 3 : 2); // CEG version.
 
         // Add an array of CEG protected functions (constant and stolen).
         j_root["ConstantOrStolen"] = j_array_protected;
@@ -128,8 +133,8 @@ public:
         j_root["ShouldRestart"] = false;
 
         // Set the breakpoint type used by the handler.
-        // '1' is default aka 'Software'.
-        j_root["BreakpointType"] = 1;
+        // '1' is default aka 'Software'. '2' is 'Hardware' (required for newest CEG).
+        j_root["BreakpointType"] = Data::CEG_NEW_VERSION ? 2 : 1;
 
         add_funcs( Data::CEG_REGISTER_THREAD_FUNC_FUNCS, "RegisterThreads" );  // CEG thread registration functions (all).
         add_funcs( Data::CEG_INTEGRITY_FUNCS, "Integrity" );
